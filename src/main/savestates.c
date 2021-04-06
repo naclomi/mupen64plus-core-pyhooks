@@ -239,13 +239,14 @@ static int savestates_load_m64p(struct device* dev, char *filepath)
         return 0;
     }
 
-    if(memcmp((char *)curr, ROM_SETTINGS.MD5, 32))
-    {
-        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State ROM MD5 does not match current ROM.");
-        gzclose(f);
-        SDL_UnlockMutex(savestates_lock);
-        return 0;
-    }
+    // Hehehehehehehehe
+    // if(memcmp((char *)curr, ROM_SETTINGS.MD5, 32))
+    // {
+    //     main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State ROM MD5 does not match current ROM.");
+    //     gzclose(f);
+    //     SDL_UnlockMutex(savestates_lock);
+    //     return 0;
+    // }
     curr += 32;
 
     /* Read the rest of the savestate */
