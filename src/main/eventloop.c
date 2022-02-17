@@ -31,6 +31,7 @@
 #define SDL_NUM_SCANCODES SDLK_LAST
 #define SDL_SCANCODE_F5 SDLK_F5
 #define SDL_SCANCODE_F7 SDLK_F7
+#define SDL_SCANCODE_F8 SDLK_F8
 #define SDL_SCANCODE_F9 SDLK_F9
 #define SDL_SCANCODE_F10 SDLK_F10
 #define SDL_SCANCODE_F11 SDLK_F11
@@ -92,6 +93,7 @@ static m64p_handle l_CoreEventsConfig = NULL;
 #define kbdReset "Kbd Mapping Reset"
 #define kbdSpeeddown "Kbd Mapping Speed Down"
 #define kbdSpeedup "Kbd Mapping Speed Up"
+#define kbdRamDump "Kbd Mapping Ram Dump"
 #define kbdScreenshot "Kbd Mapping Screenshot"
 #define kbdMute "Kbd Mapping Mute"
 #define kbdIncrease "Kbd Mapping Increase Volume"
@@ -562,6 +564,7 @@ int event_set_core_defaults(void)
     ConfigSetDefaultInt(l_CoreEventsConfig, kbdSpeeddown, sdl_native2keysym(SDL_SCANCODE_F10),        "SDL keysym for slowing down the emulator");
     ConfigSetDefaultInt(l_CoreEventsConfig, kbdSpeedup, sdl_native2keysym(SDL_SCANCODE_F11),          "SDL keysym for speeding up the emulator");
     ConfigSetDefaultInt(l_CoreEventsConfig, kbdScreenshot, sdl_native2keysym(SDL_SCANCODE_F12),       "SDL keysym for taking a screenshot");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdRamDump, sdl_native2keysym(SDL_SCANCODE_F8),           "SDL keysym for taking a ram dump");
     ConfigSetDefaultInt(l_CoreEventsConfig, kbdPause, sdl_native2keysym(SDL_SCANCODE_P),              "SDL keysym for pausing the emulator");
     ConfigSetDefaultInt(l_CoreEventsConfig, kbdMute, sdl_native2keysym(SDL_SCANCODE_M),               "SDL keysym for muting/unmuting the sound");
     ConfigSetDefaultInt(l_CoreEventsConfig, kbdIncrease, sdl_native2keysym(SDL_SCANCODE_RIGHTBRACKET),"SDL keysym for increasing the volume");
@@ -637,6 +640,8 @@ void event_sdl_keydown(int keysym, int keymod)
         main_speedup(5);
     else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdScreenshot)))
         main_take_next_screenshot();    /* screenshot will be taken at the end of frame rendering */
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdRamDump)))
+        main_rdram_dump();
     else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdPause)))
         main_toggle_pause();
     else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdMute)))

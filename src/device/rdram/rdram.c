@@ -21,14 +21,19 @@
 
 #include "rdram.h"
 
+#define M64P_CORE_PROTOTYPES 1
 #include "api/m64p_types.h"
+#include "api/m64p_config.h"
 #include "api/callbacks.h"
 #include "device/device.h"
 #include "device/memory/memory.h"
 #include "device/r4300/r4300_core.h"
 #include "device/rcp/ri/ri_controller.h"
+#include "main/main.h"
 
 #include <string.h>
+#include <stdio.h>
+#include <endian.h>
 
 #define RDRAM_BCAST_ADDRESS_MASK UINT32_C(0x00080000)
 
@@ -241,3 +246,36 @@ void write_rdram_dram(void* opaque, uint32_t address, uint32_t value, uint32_t m
 
     masked_write(&rdram->dram[addr], value, mask);
 }
+
+void dump_rdram(struct rdram* rdram, const char *filename) {
+    char filepath[512];
+    size_t start = ConfigGetParamInt(g_CoreConfig, "RamDumpStart"); 
+    size_t end = ConfigGetParamInt(g_CoreConfig, "RamDumpEnd");
+    sprintf(filepath, "%s/%s", ConfigGetParamString(g_CoreConfig, "RamDumpPath"), filename);
+
+    if (start < 0 || start >= rdram->dram_size) {
+        return;
+    }
+    if (start >= end) {
+        return;
+    }
+    if (end < 0 || end > rdram->dram_size) {
+        end = rdram->dram_size;
+    }
+
+    start /= 4;
+    end /= 4;
+
+    FILE *f = fopen(filepath, "wb");
+    for(uint32_t *cursor = ((uint32_t *)rdram->dram) + start;
+        cursor < ((uint32_t *)rdram->dram) + end;
+        cursor++)
+    {
+        uint32_t word = htobe32(*cursor);
+        fwrite(&word, 4, 1, f);
+    }
+    // fwrite(((uint8_t *)rdram->dram)+start, 1, end-start, f);
+
+    fclose(f);
+}
+

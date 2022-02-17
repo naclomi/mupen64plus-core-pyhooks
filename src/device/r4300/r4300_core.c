@@ -28,17 +28,41 @@
 #include "pure_interp.h"
 #include "recomp.h"
 
+#define M64P_CORE_PROTOTYPES 1
 #include "api/callbacks.h"
 #include "api/debugger.h"
 #include "api/m64p_types.h"
+#include "api/m64p_config.h"
 #ifdef DBG
 #include "debugger/dbg_debugger.h"
 #endif
+#include "debugger/python_hooks.h"
 #include "main/main.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
+
+void dump_regs(struct r4300_core* r4300, const char *filename) {
+    char filepath[512];
+    char jsonblob[512];
+    sprintf(filepath, "%s/%s", ConfigGetParamString(g_CoreConfig, "RamDumpPath"), filename);
+
+    FILE *f = fopen(filepath, "w");
+
+    char *write_ptr = &jsonblob[0];
+    write_ptr += sprintf(write_ptr, "{\n  'pc': 0x%08X,\n  'gp': ", *r4300_pc(r4300));
+    write_ptr += sprintf(write_ptr, "[\n    ");
+    for (int i=0; i<32; i++) {
+        write_ptr += sprintf(write_ptr, "0x%08lx,\n    ", (uint64_t) r4300->regs[i]);
+    }
+    write_ptr -= 6; // rewind over trailing comma
+    write_ptr += sprintf(write_ptr, "\n  ]\n}");
+
+    fwrite(&jsonblob[0], 1, write_ptr-&jsonblob[0], f);
+    fclose(f);
+}
 
 void init_r4300(struct r4300_core* r4300, struct memory* mem, struct mi_controller* mi, struct rdram* rdram, const struct interrupt_handler* interrupt_handlers,
     unsigned int emumode, unsigned int count_per_op, int no_compiled_jump, int randomize_interrupt, uint32_t start_address)
@@ -130,7 +154,8 @@ void run_r4300(struct r4300_core* r4300)
 #endif
 
     *r4300_stop(r4300) = 0;
-    g_rom_pause = 0;
+    // (NACL): Pause-on-start is now configurable
+    // g_rom_pause = 0;
 
     /* clear instruction counters */
 #if defined(COUNT_INSTR)
@@ -293,11 +318,16 @@ uint32_t *fast_mem_access(struct r4300_core* r4300, uint32_t address)
     return mem_base_u32(r4300->mem->base, address);
 }
 
+
+uint32_t addr_log_min = 0;
+uint32_t addr_log_max = 0;
+uint32_t last_dump_base_addr = 0;
 /* Read aligned word from memory.
  * address may not be word-aligned for byte or hword accesses.
  * Alignment is taken care of when calling mem handler.
  */
-int r4300_read_aligned_word(struct r4300_core* r4300, uint32_t address, uint32_t* value)
+
+int _untracked_r4300_read_aligned_word(struct r4300_core* r4300, uint32_t address, uint32_t* value, const char *instr_name)
 {
     if ((address & UINT32_C(0xc0000000)) != UINT32_C(0x80000000)) {
         address = virtual_to_physical_address(r4300, address, 0);
@@ -313,10 +343,39 @@ int r4300_read_aligned_word(struct r4300_core* r4300, uint32_t address, uint32_t
     return 1;
 }
 
+
+int r4300_read_aligned_word(struct r4300_core* r4300, uint32_t address, uint32_t* value, const char *instr_name)
+{
+
+    if (address >= addr_log_min && address < addr_log_max) {
+        // TODO: - it might be more useful to just collect a set() of 
+        //         pc's that access the hot memory. from logs it looks like they 
+        //         almost ALWAYS just move through memory linearly and don't jump around
+        //         (like, fair enough)
+        //       - dump frame pointer and other regs so we can do a stack trace
+        // printf("RDRAM ACCESS: PC[%08X] %4s %08X + %04X\n", (*r4300_pc(r4300)) - 4, instr_name, addr_log_min, unaligned_addr - addr_log_min);
+        if (last_dump_base_addr != addr_log_min) {
+            last_dump_base_addr = addr_log_min;
+            char fname[32];
+            sprintf(fname, "dma.0x%08X.rdram.bin", last_dump_base_addr);
+            dump_rdram(r4300->rdram, fname);
+            sprintf(fname, "dma.0x%08X.regs.yaml", last_dump_base_addr);
+            dump_regs(r4300, fname);
+
+        }
+    }
+
+    pyRunReadHooks(r4300, address);
+    
+    return _untracked_r4300_read_aligned_word(r4300, address, value, instr_name);
+}
+
 /* Read aligned dword from memory */
 int r4300_read_aligned_dword(struct r4300_core* r4300, uint32_t address, uint64_t* value)
 {
     uint32_t w[2];
+
+    pyRunReadHooks(r4300, address);
 
     /* XXX: unaligned dword accesses should trigger a address error,
      * but inaccurate timing of the core can lead to unaligned address on reset
@@ -347,7 +406,8 @@ int r4300_read_aligned_dword(struct r4300_core* r4300, uint32_t address, uint64_
  * address may not be word-aligned for byte or hword accesses.
  * Alignment is taken care of when calling mem handler.
  */
-int r4300_write_aligned_word(struct r4300_core* r4300, uint32_t address, uint32_t value, uint32_t mask)
+
+int _untracked_r4300_write_aligned_word(struct r4300_core* r4300, uint32_t address, uint32_t value, uint32_t mask)
 {
     if ((address & UINT32_C(0xc0000000)) != UINT32_C(0x80000000)) {
 
@@ -368,9 +428,28 @@ int r4300_write_aligned_word(struct r4300_core* r4300, uint32_t address, uint32_
     return 1;
 }
 
+
+int r4300_write_aligned_word(struct r4300_core* r4300, uint32_t address, uint32_t value, uint32_t mask)
+{
+    pyRunWriteHooks(r4300, address, value, mask);
+
+    if (address == ConfigGetParamInt(g_CoreConfig, "RamDumpTrigger")) {
+        // printf("trigger dump %08X / %08X\n", ConfigGetParamInt(g_CoreConfig, "RamDumpTrigger"), address);
+        char fname[32];
+        sprintf(fname, "trigger.0x%08X.rdram.bin", address);
+        dump_rdram(r4300->rdram, fname);
+        sprintf(fname, "trigger.0x%08X.regs.yaml", address);
+        dump_regs(r4300, fname);
+    }
+
+    return _untracked_r4300_write_aligned_word(r4300, address, value, mask);
+}
+
 /* Write aligned dword to memory */
 int r4300_write_aligned_dword(struct r4300_core* r4300, uint32_t address, uint64_t value, uint64_t mask)
 {
+    pyRunWriteHooks(r4300, address, value, mask);
+
     /* XXX: unaligned dword accesses should trigger a address error,
      * but inaccurate timing of the core can lead to unaligned address on reset
      * so just emit a warning and keep going */
@@ -391,6 +470,14 @@ int r4300_write_aligned_dword(struct r4300_core* r4300, uint32_t address, uint64
     invalidate_r4300_cached_code(r4300, address, 8);
 
     address &= UINT32_C(0x1ffffffc);
+    if (address == ConfigGetParamInt(g_CoreConfig, "RamDumpTrigger")) {
+        printf("trigger dump (dword) %08X / %08X\n", ConfigGetParamInt(g_CoreConfig, "RamDumpTrigger"), address);
+        char fname[32];
+        sprintf(fname, "trigger.0x%08X.rdram.bin", address);
+        dump_rdram(r4300->rdram, fname);
+        sprintf(fname, "trigger.0x%08X.regs.yaml", address);
+        dump_regs(r4300, fname);
+    }
 
     const struct mem_handler* handler = mem_get_handler(r4300->mem, address);
     mem_write32(handler, address + 0, value >> 32,      mask >> 32);

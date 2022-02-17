@@ -151,6 +151,10 @@ CFLAGS += -fno-strict-aliasing -fvisibility=hidden -I$(SRCDIR) -I$(SRCDIR)/asm_d
 CXXFLAGS += -fvisibility-inlines-hidden
 LDLIBS +=  -lm
 
+CFLAGS += $(shell python3-config --embed --cflags) $(shell python3 -m pybind11 --includes)
+CXXFLAGS += $(shell python3-config --embed --cflags) $(shell python3 -m pybind11 --includes)
+LDLIBS += $(shell python3-config --embed --ldflags)
+
 # Since we are building a shared library, we must compile with -fPIC on some architectures
 # On 32-bit x86 systems we do not want to use -fPIC because we don't have to and it has a big performance penalty on this arch
 ifeq ($(PIC), 1)
@@ -493,6 +497,7 @@ SOURCE = \
     $(SRCDIR)/api/debugger.c \
     $(SRCDIR)/api/frontend.c \
     $(SRCDIR)/api/vidext.c \
+    $(SRCDIR)/debugger/python_hooks.cpp \
     $(SRCDIR)/backends/api/video_capture_backend.c \
     $(SRCDIR)/backends/plugins_compat/audio_plugin_compat.c \
     $(SRCDIR)/backends/plugins_compat/input_plugin_compat.c \

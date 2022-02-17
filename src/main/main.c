@@ -81,6 +81,7 @@
 #ifdef DBG
 #include "debugger/dbg_debugger.h"
 #endif
+#include "debugger/python_hooks.h"
 
 #ifdef WITH_LIRC
 #include "lirc.h"
@@ -123,6 +124,7 @@ static int   l_SpeedFactor = 100;        // percentage of nominal game speed at 
 static int   l_FrameAdvance = 0;         // variable to check if we pause on next frame
 static int   l_MainSpeedLimit = 1;       // insert delay during vi_interrupt to keep speed at real-time
 
+static osd_message_t *l_msgRamDump = NULL;
 static osd_message_t *l_msgVol = NULL;
 static osd_message_t *l_msgFF = NULL;
 static osd_message_t *l_msgPause = NULL;
@@ -345,11 +347,17 @@ int main_set_core_defaults(void)
     ConfigSetDefaultBool(g_CoreConfig, "DisableExtraMem", 0, "Disable 4MB expansion RAM pack. May be necessary for some games");
     ConfigSetDefaultBool(g_CoreConfig, "AutoStateSlotIncrement", 0, "Increment the save state slot after each save operation");
     ConfigSetDefaultBool(g_CoreConfig, "EnableDebugger", 0, "Activate the R4300 debugger when ROM execution begins, if core was built with Debugger support");
+    ConfigSetDefaultBool(g_CoreConfig, "StartPaused", 0, "Start emulator in paused state");
     ConfigSetDefaultInt(g_CoreConfig, "CurrentStateSlot", 0, "Save state slot (0-9) to use when saving/loading the emulator state");
     ConfigSetDefaultString(g_CoreConfig, "ScreenshotPath", "", "Path to directory where screenshots are saved. If this is blank, the default value of ${UserDataPath}/screenshot will be used");
     ConfigSetDefaultString(g_CoreConfig, "SaveStatePath", "", "Path to directory where emulator save states (snapshots) are saved. If this is blank, the default value of ${UserDataPath}/save will be used");
     ConfigSetDefaultString(g_CoreConfig, "SaveSRAMPath", "", "Path to directory where SRAM/EEPROM data (in-game saves) are stored. If this is blank, the default value of ${UserDataPath}/save will be used");
     ConfigSetDefaultString(g_CoreConfig, "SharedDataPath", "", "Path to a directory to search when looking for shared data files");
+    ConfigSetDefaultString(g_CoreConfig, "RamDumpPath", "/tmp/", "Path to directory where ram dumps are saved.");
+    ConfigSetDefaultString(g_CoreConfig, "PythonHookPath", "", "Path to directory where python debugger hooks are stored.");
+    ConfigSetDefaultInt(g_CoreConfig, "RamDumpStart", 0, "Starting address of ram dump (inclusive)");
+    ConfigSetDefaultInt(g_CoreConfig, "RamDumpEnd", -1, "Ending address of ram dump (inclusive). -1 for end of RAM.");
+    ConfigSetDefaultInt(g_CoreConfig, "RamDumpTrigger", -1, "RDRAM write address to trigger ram dump");
     ConfigSetDefaultInt(g_CoreConfig, "CountPerOp", 0, "Force number of cycles per emulated instruction");
     ConfigSetDefaultBool(g_CoreConfig, "RandomizeInterrupt", 1, "Randomize PI/SI Interrupt Timing");
     ConfigSetDefaultInt(g_CoreConfig, "SiDmaDuration", -1, "Duration of SI DMA (-1: use per game settings)");
@@ -462,6 +470,16 @@ static void main_set_speedlimiter(int enable)
 static int main_is_paused(void)
 {
     return (g_EmulatorRunning && g_rom_pause);
+}
+
+void main_rdram_dump(void){
+    if (l_msgRamDump != NULL)
+        osd_update_message(l_msgRamDump, "Ram dumped");
+    else {
+        l_msgRamDump = osd_new_message(OSD_MIDDLE_CENTER, "Ram dumped");
+        osd_message_set_user_managed(l_msgRamDump);
+    }
+    dump_rdram(&g_dev.rdram, "manual.rdram.bin");
 }
 
 void main_toggle_pause(void)
@@ -1467,9 +1485,15 @@ m64p_error main_run(void)
     void* gbcam_backend;
     const struct video_capture_backend_interface* igbcam_backend;
 
+    const char *hook_path = ConfigGetParamString(g_CoreConfig, "PythonHookPath");
+    if (hook_path[0] != 0) {
+        pyLoadHooks(hook_path);
+    }
+
+
+
     /* XXX: select type of flashram from db */
     uint32_t flashram_type = MX29L1100_ID;
-
 
     /* take the r4300 emulator mode from the config file at this point and cache it in a global variable */
     emumode = ConfigGetParamInt(g_CoreConfig, "R4300Emulator");
@@ -1777,7 +1801,14 @@ m64p_error main_run(void)
     osd_new_message(OSD_MIDDLE_CENTER, "Mupen64Plus Started...");
 
     g_EmulatorRunning = 1;
-    StateChanged(M64CORE_EMU_STATE, M64EMU_RUNNING);
+    if(ConfigGetParamBool(g_CoreConfig, "StartPaused")){
+        // Start paused:
+        g_rom_pause = 1;
+        StateChanged(M64CORE_EMU_STATE, M64EMU_PAUSED);        
+    } else {
+        g_rom_pause = 0;
+        StateChanged(M64CORE_EMU_STATE, M64EMU_RUNNING);
+    }
 
     poweron_device(&g_dev);
     pif_bootrom_hle_execute(&g_dev.r4300);

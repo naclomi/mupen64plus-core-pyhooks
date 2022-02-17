@@ -129,7 +129,7 @@ DECLARE_INSTRUCTION(LB)
     uint32_t value;
     unsigned int shift = bshift(lsaddr);
 
-    if (r4300_read_aligned_word(r4300, lsaddr, &value)) {
+    if (r4300_read_aligned_word(r4300, lsaddr, &value, "lb")) {
         *lsrtp = SE8((value >> shift) & 0xff);
     }
 }
@@ -143,7 +143,7 @@ DECLARE_INSTRUCTION(LBU)
     uint32_t value;
     unsigned int shift = bshift(lsaddr);
 
-    if (r4300_read_aligned_word(r4300, lsaddr, &value)) {
+    if (r4300_read_aligned_word(r4300, lsaddr, &value, "lbu")) {
         *lsrtp = (value >> shift) & 0xff;
     }
 }
@@ -157,7 +157,7 @@ DECLARE_INSTRUCTION(LH)
     uint32_t value;
     unsigned int shift = hshift(lsaddr);
 
-    if (r4300_read_aligned_word(r4300, lsaddr, &value)) {
+    if (r4300_read_aligned_word(r4300, lsaddr, &value, "lh")) {
         *lsrtp = SE16((value >> shift) & 0xffff);
     }
 }
@@ -171,7 +171,7 @@ DECLARE_INSTRUCTION(LHU)
     uint32_t value;
     unsigned int shift = hshift(lsaddr);
 
-    if (r4300_read_aligned_word(r4300, lsaddr, &value)) {
+    if (r4300_read_aligned_word(r4300, lsaddr, &value, "lhu")) {
         *lsrtp = (value >> shift) & 0xffff;
     }
 }
@@ -184,7 +184,7 @@ DECLARE_INSTRUCTION(LL)
     ADD_TO_PC(1);
     uint32_t value;
 
-    if (r4300_read_aligned_word(r4300, lsaddr, &value)) {
+    if (r4300_read_aligned_word(r4300, lsaddr, &value, "ll")) {
         *lsrtp = SE32(value);
         r4300->llbit = 1;
     }
@@ -198,7 +198,7 @@ DECLARE_INSTRUCTION(LW)
     ADD_TO_PC(1);
     uint32_t value;
 
-    if (r4300_read_aligned_word(r4300, lsaddr, &value)) {
+    if (r4300_read_aligned_word(r4300, lsaddr, &value, "lw")) {
         *lsrtp = SE32(value);
     }
 }
@@ -212,7 +212,7 @@ DECLARE_INSTRUCTION(LWU)
 
     uint32_t value;
 
-    if (r4300_read_aligned_word(r4300, lsaddr, &value)) {
+    if (r4300_read_aligned_word(r4300, lsaddr, &value, "lwu")) {
         *lsrtp = value;
     }
 }
@@ -229,7 +229,7 @@ DECLARE_INSTRUCTION(LWL)
     uint32_t mask = BITS_BELOW_MASK32(8 * n);
     uint32_t value;
 
-    if (r4300_read_aligned_word(r4300, lsaddr, &value)) {
+    if (r4300_read_aligned_word(r4300, lsaddr, &value, "lwl")) {
         *lsrtp = SE32(((uint32_t)*lsrtp & mask) | ((uint32_t)value << shift));
     }
 }
@@ -248,7 +248,7 @@ DECLARE_INSTRUCTION(LWR)
         : BITS_ABOVE_MASK32(8 * (n + 1));
     uint32_t value;
 
-    if (r4300_read_aligned_word(r4300, lsaddr, &value)) {
+    if (r4300_read_aligned_word(r4300, lsaddr, &value, "lwr")) {
         *lsrtp = SE32(((uint32_t)*lsrtp & mask) | ((uint32_t)value >> shift));
     }
 }
@@ -1348,7 +1348,7 @@ DECLARE_INSTRUCTION(LWC1)
     if (check_cop1_unusable(r4300)) { return; }
     ADD_TO_PC(1);
 
-    r4300_read_aligned_word(r4300, lslfaddr, (uint32_t*)r4300_cp1_regs_simple(&r4300->cp1)[lslfft]);
+    r4300_read_aligned_word(r4300, lslfaddr, (uint32_t*)r4300_cp1_regs_simple(&r4300->cp1)[lslfft], "lwc1");
 }
 
 DECLARE_INSTRUCTION(LDC1)

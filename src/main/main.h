@@ -77,6 +77,8 @@ void main_speedup(int percent);
 void main_speeddown(int percent);
 void main_set_fastforward(int enable);
 
+void main_rdram_dump(void);
+
 void main_take_next_screenshot(void);
 
 void main_state_set_slot(int slot);

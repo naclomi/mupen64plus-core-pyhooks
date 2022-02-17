@@ -941,7 +941,7 @@ int dynarec_read_aligned_word(void)
     int result = r4300_read_aligned_word(
         r4300,
         r4300->recomp.address,
-        &value);
+        &value, "[recomp]");
 
     if (result)
         *r4300->recomp.rdword = value;

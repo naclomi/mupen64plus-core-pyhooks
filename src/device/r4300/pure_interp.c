@@ -35,7 +35,35 @@
 #ifdef DBG
 #include "debugger/dbg_debugger.h"
 #endif
+#include "debugger/python_hooks.h"
 
+
+#include "device/memory/memory.h"
+#include "device/rdram/rdram.h"
+#include <stdio.h>
+#define FN_FLUSH 0x80139D70
+#define FN_MEMCPY 0x801D211C
+#define EMULATED_STDOUT 0x8025d578
+static uint32_t stdout_dst[256];
+static void debug_trigger_link(struct r4300_core* r4300, const uint32_t target) {
+
+	if (target == FN_FLUSH) {
+      if (getenv("GLOVER_STDOUT") != NULL) {
+         const uint32_t *src = mem_base_u32(r4300->mem->base, EMULATED_STDOUT & UINT32_C(0x1ffffffc));
+
+         for (int idx = 0; idx < 255; idx++) {
+            uint32_t word = htobe32(src[idx]);
+            stdout_dst[idx] = word;
+            if ((word & 0xFF) == 0 || (word & 0xFF00) == 0 ||
+               (word & 0xFF0000) == 0 || (word & 0xFF000000) == 0) {
+                  break;
+            }
+            printf("printf |%s\n", (const char *) stdout_dst);
+            fflush(stdout);
+         }
+      }
+	}
+}
 
 static void InterpretOpcode(struct r4300_core* r4300);
 
@@ -73,6 +101,11 @@ static void InterpretOpcode(struct r4300_core* r4300);
       } \
       r4300->cp0.last_addr = r4300->interp_PC.addr; \
       if (*r4300_cp0_cycle_count(&r4300->cp0) >= 0) gen_interrupt(r4300); \
+      \
+      if (link_register != &r4300_regs(r4300)[0]) \
+      { \
+          debug_trigger_link(r4300, jump_target); \
+      } \
    } \
    static void name##_IDLE(struct r4300_core* r4300, uint32_t op) \
    { \
@@ -709,6 +742,33 @@ void InterpretOpcode(struct r4300_core* r4300)
 	} /* switch ((op >> 26) & 0x3F) */
 }
 
+
+uint32_t read_u32(struct r4300_core* r4300, uint32_t address) {
+   uint32_t alignment = address & 3;
+   if (alignment == 0) {
+      uint32_t value;
+      r4300_read_aligned_word(r4300, address, &value, "debug");
+      return value;
+   } else {
+      uint32_t address_left = address & 0xFFFFFFFC;
+      uint32_t address_right = address_left + 4;
+      uint32_t value_left;
+      uint32_t value_right;
+      r4300_read_aligned_word(r4300, address_left, &value_left, "debug");
+      r4300_read_aligned_word(r4300, address_right, &value_right, "debug");
+      return (value_left << (alignment * 8)) |
+             (value_right >> (32 - alignment * 8));
+   }
+}
+
+uint16_t read_u16(struct r4300_core* r4300, uint32_t address) {
+   return (read_u32(r4300, address) & 0xFFFF0000) >> 16;
+}
+
+uint8_t read_u8(struct r4300_core* r4300, uint32_t address) {
+   return (read_u32(r4300, address) & 0xFF000000) >> 24;
+}
+
 void run_pure_interpreter(struct r4300_core* r4300)
 {
    *r4300_stop(r4300) = 0;
@@ -724,5 +784,43 @@ void run_pure_interpreter(struct r4300_core* r4300)
      if (g_DebuggerActive) update_debugger(*r4300_pc(r4300));
 #endif
      InterpretOpcode(r4300);
+
+     pyRunPCHooks(r4300);
+      // Custom breakpoints
+
+      if (*r4300_pc(r4300) == 0x801822CC) {
+         // Top of landscape parsing hot loop
+
+
+         if (getenv("GLOVER_DUMP_LEV_OFFSETS") != NULL) {
+            // Get base address of buffer
+            uint32_t base_addr = read_u32(r4300, r4300->regs[29] + 0x3c);
+
+            // Get active level ID
+            uint32_t level_id = read_u8(r4300, 0x801e7531);
+
+            printf("level %d cmd +0x%x = 0x%04x\n", level_id, r4300->regs[2] - base_addr - 2, r4300->regs[4] >> 16);
+         }
+
+      }
+
+      if (*r4300_pc(r4300) == 0x80182eac) {
+         // Bottom of landscape parsing function
+         if (getenv("GLOVER_DUMP_LEV_OFFSETS") != NULL) {
+            printf("level parsing complete\n");
+            fflush(stdout);
+         }
+      }
+
+      if (*r4300_pc(r4300) == 0x8011D88C) {
+         // Top of level loading machinery
+
+         // Force level load to levelID
+         if (getenv("GLOVER_LEVEL_ID") != NULL) {
+            r4300->regs[4] = atoi(getenv("GLOVER_LEVEL_ID"));
+         }
+
+      }
+
    }
 }

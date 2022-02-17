@@ -11211,7 +11211,7 @@ static void read_byte_new(int pcaddr, int count, int diff)
   r4300->delay_slot = pcaddr & 1;
   state->pending_exception = 0;
   unsigned int shift = bshift(state->address);
-  if (r4300_read_aligned_word(r4300, state->address, &value)) {
+  if (r4300_read_aligned_word(r4300, state->address, &value,"[dynarec]")) {
     state->rdword = (uint64_t)((value >> shift) & 0xff);
   }
   r4300->delay_slot = 0;
@@ -11229,7 +11229,7 @@ static void read_hword_new(int pcaddr, int count, int diff)
   r4300->delay_slot = pcaddr & 1;
   state->pending_exception = 0;
   unsigned int shift = hshift(state->address);
-  if (r4300_read_aligned_word(r4300, state->address, &value)) {
+  if (r4300_read_aligned_word(r4300, state->address, &value,"[dynarec]")) {
     state->rdword = (uint64_t)((value >> shift) & 0xffff);
   }
   r4300->delay_slot = 0;
@@ -11246,7 +11246,7 @@ static void read_word_new(int pcaddr, int count, int diff)
   state->pcaddr = pcaddr&~1;
   r4300->delay_slot = pcaddr & 1;
   state->pending_exception = 0;
-  if (r4300_read_aligned_word(r4300, state->address, &value)) {
+  if (r4300_read_aligned_word(r4300, state->address, &value,"[dynarec]")) {
     state->rdword = (uint64_t)(value);
   }
   r4300->delay_slot = 0;

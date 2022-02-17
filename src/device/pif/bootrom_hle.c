@@ -91,7 +91,7 @@ void pif_bootrom_hle_execute(struct r4300_core* r4300)
     /* XXX: wait for PIF_3c[7] to be cleared */
 
     /* read and parse pif24 */
-    r4300_read_aligned_word(r4300, R4300_KSEG1 + MM_PIF_MEM + PIF_ROM_SIZE + 0x24, &pif24);
+    r4300_read_aligned_word(r4300, R4300_KSEG1 + MM_PIF_MEM + PIF_ROM_SIZE + 0x24, &pif24, "[pif]");
     rom_type   = (pif24 >> 19) & 0x01;
     s7         = (pif24 >> 18) & 0x01;
     reset_type = (pif24 >> 17) & 0x01;
@@ -109,7 +109,7 @@ void pif_bootrom_hle_execute(struct r4300_core* r4300)
     /* configure ROM access
      * XXX: we skip the first temporary configuration */
     uint32_t rom_base = (rom_type == 0) ? MM_CART_ROM : MM_DD_ROM;
-    r4300_read_aligned_word(r4300, R4300_KSEG1 + rom_base, &bsd_dom1_config);
+    r4300_read_aligned_word(r4300, R4300_KSEG1 + rom_base, &bsd_dom1_config, "[pif]");
     r4300_write_aligned_word(r4300, R4300_KSEG1 + MM_PI_REGS + 4*PI_BSD_DOM1_LAT_REG, (bsd_dom1_config      ) & 0xff, ~UINT32_C(0));
     r4300_write_aligned_word(r4300, R4300_KSEG1 + MM_PI_REGS + 4*PI_BSD_DOM1_PWD_REG, (bsd_dom1_config >>  8) & 0xff, ~UINT32_C(0));
     r4300_write_aligned_word(r4300, R4300_KSEG1 + MM_PI_REGS + 4*PI_BSD_DOM1_PGS_REG, (bsd_dom1_config >> 16) & 0x0f, ~UINT32_C(0));

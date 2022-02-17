@@ -31,6 +31,7 @@
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
+#include <stdio.h>
 
 #define CART_ROM_ADDR_MASK UINT32_C(0x03ffffff);
 
@@ -57,6 +58,8 @@ void read_cart_rom(void* opaque, uint32_t address, uint32_t* value)
 {
     struct cart_rom* cart_rom = (struct cart_rom*)opaque;
     uint32_t addr = rom_address(address);
+
+    printf("READ FROM %08X\n", address);
 
     if (cart_rom->pi->regs[PI_STATUS_REG] & PI_STATUS_IO_BUSY)
     {
@@ -86,10 +89,16 @@ unsigned int cart_rom_dma_read(void* opaque, const uint8_t* dram, uint32_t dram_
 {
     cart_addr &= CART_ROM_ADDR_MASK;
 
+    printf("DMA RD %08X %d bytes from %08X \n", cart_addr, length, dram_addr);
+
+
     DebugMessage(M64MSG_WARNING, "DMA Writing to CART_ROM: 0x%" PRIX32 " -> 0x%" PRIX32 " (0x%" PRIX32 ")", dram_addr, cart_addr, length);
 
     return /* length / 8 */0x1000;
 }
+
+extern uint32_t addr_log_min;
+extern uint32_t addr_log_max;
 
 unsigned int cart_rom_dma_write(void* opaque, uint8_t* dram, uint32_t dram_addr, uint32_t cart_addr, uint32_t length)
 {
@@ -98,6 +107,15 @@ unsigned int cart_rom_dma_write(void* opaque, uint8_t* dram, uint32_t dram_addr,
     const uint8_t* mem = cart_rom->rom;
 
     cart_addr &= CART_ROM_ADDR_MASK;
+
+    if (length != 1536){
+        // printf("DMA WR %08X %d bytes into %08X \n", cart_addr, length, dram_addr);
+        if(length>1000 && cart_addr > 0x101000) {
+            // An interesting DMA triggered
+            addr_log_min = dram_addr;
+            addr_log_max = dram_addr + length;
+        }
+    }
 
     if (cart_addr + length < cart_rom->rom_size)
     {
