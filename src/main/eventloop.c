@@ -71,6 +71,7 @@
 #include "eventloop.h"
 #include "main.h"
 #include "plugin/plugin.h"
+#include "debugger/python_hooks.h"
 #include "sdl_key_converter.h"
 #include "util.h"
 
@@ -663,6 +664,7 @@ void event_sdl_keydown(int keysym, int keymod)
         input.keyDown(keymod, keysym);
     }
 
+    g_run_button_hooks = 1;
 }
 
 void event_sdl_keyup(int keysym, int keymod)
@@ -681,6 +683,7 @@ void event_sdl_keyup(int keysym, int keymod)
     }
     else input.keyUp(keymod, keysym);
 
+    g_run_button_hooks = 1;
 }
 
 int event_gameshark_active(void)

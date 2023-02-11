@@ -59,7 +59,7 @@ void read_cart_rom(void* opaque, uint32_t address, uint32_t* value)
     struct cart_rom* cart_rom = (struct cart_rom*)opaque;
     uint32_t addr = rom_address(address);
 
-    printf("READ FROM %08X\n", address);
+    // printf("READ FROM %08X\n", address);
 
     if (cart_rom->pi->regs[PI_STATUS_REG] & PI_STATUS_IO_BUSY)
     {
@@ -85,12 +85,23 @@ void write_cart_rom(void* opaque, uint32_t address, uint32_t value, uint32_t mas
     add_interrupt_event(&cart_rom->r4300->cp0, PI_INT, 0x1000);
 }
 
+
+extern char cart_dma_read_trigger;
+extern char cart_dma_write_trigger;
+extern uint32_t cart_dma_dram;
+extern uint32_t cart_dma_base;
+extern uint32_t cart_dma_len;
+
 unsigned int cart_rom_dma_read(void* opaque, const uint8_t* dram, uint32_t dram_addr, uint32_t cart_addr, uint32_t length)
 {
     cart_addr &= CART_ROM_ADDR_MASK;
 
-    printf("DMA RD %08X %d bytes from %08X \n", cart_addr, length, dram_addr);
+    // printf("DMA RD %08X %d bytes from %08X \n", cart_addr, length, dram_addr);
 
+    cart_dma_read_trigger = 1;
+    cart_dma_base = cart_addr;
+    cart_dma_len = length;
+    cart_dma_dram = dram_addr;
 
     DebugMessage(M64MSG_WARNING, "DMA Writing to CART_ROM: 0x%" PRIX32 " -> 0x%" PRIX32 " (0x%" PRIX32 ")", dram_addr, cart_addr, length);
 
@@ -107,6 +118,15 @@ unsigned int cart_rom_dma_write(void* opaque, uint8_t* dram, uint32_t dram_addr,
     const uint8_t* mem = cart_rom->rom;
 
     cart_addr &= CART_ROM_ADDR_MASK;
+
+    cart_dma_write_trigger = 1;
+    cart_dma_base = cart_addr;
+    cart_dma_len = length;
+    cart_dma_dram = dram_addr;
+
+    if (length != 1024 && length != 2048){
+        // printf("DMA WR %08X %d bytes into %08X \n", cart_addr, length, dram_addr);
+    }
 
     if (length != 1536){
         // printf("DMA WR %08X %d bytes into %08X \n", cart_addr, length, dram_addr);

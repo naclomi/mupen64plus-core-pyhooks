@@ -19,6 +19,7 @@
 extern "C" {
 #include "device/r4300/r4300_core.h"
 #include "device/rdram/rdram.h"
+#include "plugin/plugin.h"
 }
 
 namespace py = pybind11;
@@ -26,7 +27,7 @@ using namespace pybind11::literals;
 
 PYBIND11_MAKE_OPAQUE(std::vector<uint64_t>);
 
-
+char g_run_button_hooks = false;
 static uint32_t nextCookie;
 
 struct Hook {
@@ -43,12 +44,43 @@ struct RangeHook {
 
 static std::map<uint32_t, std::vector<Hook> > all_pc_hooks;
 
+static std::map<uint32_t, std::vector<Hook> > all_button_hooks;
+
 static std::vector<RangeHook> all_ram_read_hooks;
 static std::vector<RangeHook> all_ram_write_hooks;
+
+static std::vector<RangeHook> all_cart_read_hooks;
+static std::vector<RangeHook> all_cart_write_hooks;
 
 // TODO: mark hooks for removal rather than doing it automatically
 // TODO: accept a True/False return value from hook that determines
 //       whether to delete it or not
+
+uint32_t registerButtonHook(uint32_t buttons, py::function callback) {
+    auto button_hooks = all_button_hooks[buttons];
+    button_hooks.push_back({callback, nextCookie});
+    all_button_hooks[buttons] = button_hooks;
+    nextCookie += 1;
+    printf("Registered hook %s for button combination 0x%08X\n", std::string(py::str(callback.attr("__name__"))).c_str(), buttons);
+    return nextCookie - 1;
+}
+
+void removeButtonHook(uint32_t cookie) {
+    for (auto &pair : all_button_hooks) {
+        for (auto it = pair.second.begin(); it != pair.second.end(); it++) {
+            if (it->cookie == cookie) {
+                printf("Removed hook %s for button combination 0x%08X\n", std::string(py::str(it->callback.attr("__name__"))).c_str(), pair.first);
+                pair.second.erase(it);
+                if (pair.second.size() == 0) {
+                    all_button_hooks.erase(pair.first);
+                } else {
+                    all_button_hooks[pair.first] = pair.second;
+                }
+                return;
+            }        
+        }
+    }
+}
 
 uint32_t registerPCHook(uint32_t pc, py::function callback) {
     auto pc_hooks = all_pc_hooks[pc];
@@ -76,10 +108,27 @@ void removePCHook(uint32_t cookie) {
     }
 }
 
+uint32_t registerCartReadHook(uint32_t addr_min, uint32_t addr_max, py::function callback) {
+    all_cart_read_hooks.push_back({addr_min, addr_max, callback, nextCookie});
+    nextCookie += 1;
+    printf("Registered hook %s for reads in cart range [0x%08X - 0x%08X) \n", std::string(py::str(callback.attr("__name__"))).c_str(), addr_min, addr_max);
+    return nextCookie - 1;
+}
+
+void removeCartReadHook(uint32_t cookie) {
+    for (auto it = all_cart_read_hooks.begin(); it != all_cart_read_hooks.end(); it++) {
+        if (it->cookie == cookie) {
+            printf("Removed hook %s for reads in cart range [0x%08X - 0x%08X)\n", std::string(py::str(it->callback.attr("__name__"))).c_str(), it->min, it->max);
+            all_cart_read_hooks.erase(it);
+            return;
+        }        
+    }
+}
+
 uint32_t registerRAMReadHook(uint32_t addr_min, uint32_t addr_max, py::function callback) {
     all_ram_read_hooks.push_back({addr_min, addr_max, callback, nextCookie});
     nextCookie += 1;
-    printf("Registered hook %s for reads in range [0x%08X - 0x%08X) \n", std::string(py::str(callback.attr("__name__"))).c_str(), addr_min, addr_max);
+    printf("Registered hook %s for reads in RAM range [0x%08X - 0x%08X) \n", std::string(py::str(callback.attr("__name__"))).c_str(), addr_min, addr_max);
     return nextCookie - 1;
 }
 
@@ -87,24 +136,42 @@ uint32_t registerRAMReadHook(uint32_t addr_min, uint32_t addr_max, py::function 
 void removeRAMReadHook(uint32_t cookie) {
     for (auto it = all_ram_read_hooks.begin(); it != all_ram_read_hooks.end(); it++) {
         if (it->cookie == cookie) {
-            printf("Removed hook %s for reads in range [0x%08X - 0x%08X)\n", std::string(py::str(it->callback.attr("__name__"))).c_str(), it->min, it->max);
+            printf("Removed hook %s for reads in RAM range [0x%08X - 0x%08X)\n", std::string(py::str(it->callback.attr("__name__"))).c_str(), it->min, it->max);
             all_ram_read_hooks.erase(it);
             return;
         }        
     }
 }
 
+uint32_t registerCartWriteHook(uint32_t addr_min, uint32_t addr_max, py::function callback) {
+    all_cart_write_hooks.push_back({addr_min, addr_max, callback, nextCookie});
+    nextCookie += 1;
+    printf("Registered hook %s for writes in cart range [0x%08X - 0x%08X) \n", std::string(py::str(callback.attr("__name__"))).c_str(), addr_min, addr_max);
+    return nextCookie - 1;
+}
+
+void removeCartWriteHook(uint32_t cookie) {
+    for (auto it = all_cart_write_hooks.begin(); it != all_cart_write_hooks.end(); it++) {
+        if (it->cookie == cookie) {
+            printf("Removed hook %s for reads in cart range [0x%08X - 0x%08X)\n", std::string(py::str(it->callback.attr("__name__"))).c_str(), it->min, it->max);
+            all_cart_write_hooks.erase(it);
+            return;
+        }        
+    }
+}
+
+
 uint32_t registerRAMWriteHook(uint32_t addr_min, uint32_t addr_max, py::function callback) {
     all_ram_write_hooks.push_back({addr_min, addr_max, callback, nextCookie});
     nextCookie += 1;
-    printf("Registered hook %s for writes in range [0x%08X - 0x%08X) \n", std::string(py::str(callback.attr("__name__"))).c_str(), addr_min, addr_max);
+    printf("Registered hook %s for writes in RAM range [0x%08X - 0x%08X) \n", std::string(py::str(callback.attr("__name__"))).c_str(), addr_min, addr_max);
     return nextCookie - 1;
 }
 
 void removeRAMWriteHook(uint32_t cookie) {
     for (auto it = all_ram_write_hooks.begin(); it != all_ram_write_hooks.end(); it++) {
         if (it->cookie == cookie) {
-            printf("Removed hook %s for reads in range [0x%08X - 0x%08X)\n", std::string(py::str(it->callback.attr("__name__"))).c_str(), it->min, it->max);
+            printf("Removed hook %s for reads in RAM range [0x%08X - 0x%08X)\n", std::string(py::str(it->callback.attr("__name__"))).c_str(), it->min, it->max);
             all_ram_write_hooks.erase(it);
             return;
         }        
@@ -186,6 +253,7 @@ class CoreState {
         }
 
         void write_u8(uint32_t address, uint8_t value, uint8_t mask=0xFF) {
+            // TODO: writing u8s is broken, it can fuck with memory outside of the mask region
             write_u32(address, value, mask);
         }
 
@@ -217,11 +285,20 @@ PYBIND11_EMBEDDED_MODULE(mupen_core, m) {
     m.def("registerPCHook", &registerPCHook, "Register a callback for a specific PC address");
     m.def("removePCHook", &removePCHook, "Remove a callback for a specific PC address");
 
+    m.def("registerButtonHook", &registerButtonHook, "Register a callback for a specific controller button combination");
+    m.def("removeButtonHook", &removeButtonHook, "Remove a callback for a specific controller button combination");
+
     m.def("registerRAMReadHook", &registerRAMReadHook, "Register a callback for reads within an RDRAM address range");
     m.def("removeRAMReadHook", &removeRAMReadHook, "Remove a callback for reads within an RDRAM address range");
 
     m.def("registerRAMWriteHook", &registerRAMWriteHook, "Register a callback for writes within an RDRAM address range");
     m.def("removeRAMWriteHook", &removeRAMWriteHook, "Remove a callback for writes within an RDRAM address range");
+
+    m.def("registerCartReadHook", &registerCartReadHook, "Register a callback for reads within a cartride address range");
+    m.def("removeCartReadHook", &removeCartReadHook, "Remove a callback for reads within a cartride address range");
+
+    m.def("registerCartWriteHook", &registerCartWriteHook, "Register a callback for writes within a cartride address range");
+    m.def("removeCartWriteHook", &removeCartWriteHook, "Remove a callback for writes within a cartride address range");
 
     py::bind_vector<std::vector<uint64_t>>(m, "RegsVector");
 
@@ -263,15 +340,40 @@ static inline void runRangeHooks(struct r4300_core* r4300, uint32_t address, std
     state.commit();
 }
 
-extern "C" void pyRunReadHooks(struct r4300_core* r4300, uint32_t address) {
+extern "C" void pyRunRamReadHooks(struct r4300_core* r4300, uint32_t address) {
     runRangeHooks(r4300, address, all_ram_read_hooks, 0, 0);
 }
 
 
-extern "C" void pyRunWriteHooks(struct r4300_core* r4300, uint32_t address, uint64_t value, uint64_t mask) {
+extern "C" void pyRunRamWriteHooks(struct r4300_core* r4300, uint32_t address, uint64_t value, uint64_t mask) {
     runRangeHooks(r4300, address, all_ram_write_hooks, value, mask);
 }
 
+
+static inline void runDMAHooks(struct r4300_core* r4300, uint32_t base, uint32_t len, uint32_t dst, std::vector<RangeHook>& hooks) {
+    if (hooks.size() == 0 || r4300 == NULL) {
+        return;
+    }
+
+    CoreState state {r4300};
+
+    for (auto hook : hooks) {
+        if (base < hook.max && base + len > hook.min) {
+            hook.callback(&state, base, len, dst);
+        }
+    }
+
+    state.commit();
+}
+
+extern "C" void pyRunCartReadHooks(struct r4300_core* r4300, uint32_t base, uint32_t len, uint32_t dst) {
+    runDMAHooks(r4300, base, len, dst, all_cart_read_hooks);
+}
+
+
+extern "C" void pyRunCartWriteHooks(struct r4300_core* r4300, uint32_t base, uint32_t len, uint32_t dst) {
+    runDMAHooks(r4300, base, len, dst, all_cart_write_hooks);
+}
 
 extern "C" void pyRunPCHooks(struct r4300_core* r4300) {
     if (r4300 == NULL) {
@@ -288,6 +390,27 @@ extern "C" void pyRunPCHooks(struct r4300_core* r4300) {
 
     for (auto &hook : it->second){
         hook.callback(&state);
+    }
+
+    state.commit();
+}
+
+extern "C" void pyRunButtonHooks(struct r4300_core* r4300) {
+    if (r4300 == NULL || all_button_hooks.size() == 0) {
+        return;
+    }
+
+    BUTTONS buttons;
+    buttons.Value = 0;
+    input.getKeys(0, &buttons);
+    CoreState state {r4300};
+
+    for (auto hook_list : all_button_hooks) {
+        if ((hook_list.first & buttons.Value) == buttons.Value) {
+            for (auto hook : hook_list.second) {
+                hook.callback(&state);
+            }
+        }
     }
 
     state.commit();

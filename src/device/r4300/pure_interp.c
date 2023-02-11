@@ -769,6 +769,12 @@ uint8_t read_u8(struct r4300_core* r4300, uint32_t address) {
    return (read_u32(r4300, address) & 0xFF000000) >> 24;
 }
 
+char cart_dma_read_trigger = 0;
+char cart_dma_write_trigger = 0;
+uint32_t cart_dma_dram;
+uint32_t cart_dma_base;
+uint32_t cart_dma_len;
+
 void run_pure_interpreter(struct r4300_core* r4300)
 {
    *r4300_stop(r4300) = 0;
@@ -786,6 +792,21 @@ void run_pure_interpreter(struct r4300_core* r4300)
      InterpretOpcode(r4300);
 
      pyRunPCHooks(r4300);
+     if (g_run_button_hooks == 1) {
+         pyRunButtonHooks(r4300);
+         g_run_button_hooks = 0;
+     }
+     if (cart_dma_read_trigger) {
+         cart_dma_read_trigger = 0;
+         // DMA write -> cartridge read
+         pyRunCartWriteHooks(r4300, cart_dma_base, cart_dma_len, cart_dma_dram);
+     }
+     if (cart_dma_write_trigger) {
+         cart_dma_write_trigger = 0;
+         // DMA read -> cartridge write
+         pyRunCartReadHooks(r4300, cart_dma_base, cart_dma_len, cart_dma_dram);
+     }
+
       // Custom breakpoints
 
       if (*r4300_pc(r4300) == 0x801822CC) {

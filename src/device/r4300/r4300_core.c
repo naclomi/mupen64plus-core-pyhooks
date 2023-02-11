@@ -365,7 +365,7 @@ int r4300_read_aligned_word(struct r4300_core* r4300, uint32_t address, uint32_t
         }
     }
 
-    pyRunReadHooks(r4300, address);
+    pyRunRamReadHooks(r4300, address);
     
     return _untracked_r4300_read_aligned_word(r4300, address, value, instr_name);
 }
@@ -375,7 +375,7 @@ int r4300_read_aligned_dword(struct r4300_core* r4300, uint32_t address, uint64_
 {
     uint32_t w[2];
 
-    pyRunReadHooks(r4300, address);
+    pyRunRamReadHooks(r4300, address);
 
     /* XXX: unaligned dword accesses should trigger a address error,
      * but inaccurate timing of the core can lead to unaligned address on reset
@@ -431,7 +431,7 @@ int _untracked_r4300_write_aligned_word(struct r4300_core* r4300, uint32_t addre
 
 int r4300_write_aligned_word(struct r4300_core* r4300, uint32_t address, uint32_t value, uint32_t mask)
 {
-    pyRunWriteHooks(r4300, address, value, mask);
+    pyRunRamWriteHooks(r4300, address, value, mask);
 
     if (address == ConfigGetParamInt(g_CoreConfig, "RamDumpTrigger")) {
         // printf("trigger dump %08X / %08X\n", ConfigGetParamInt(g_CoreConfig, "RamDumpTrigger"), address);
@@ -448,7 +448,7 @@ int r4300_write_aligned_word(struct r4300_core* r4300, uint32_t address, uint32_
 /* Write aligned dword to memory */
 int r4300_write_aligned_dword(struct r4300_core* r4300, uint32_t address, uint64_t value, uint64_t mask)
 {
-    pyRunWriteHooks(r4300, address, value, mask);
+    pyRunRamWriteHooks(r4300, address, value, mask);
 
     /* XXX: unaligned dword accesses should trigger a address error,
      * but inaccurate timing of the core can lead to unaligned address on reset
