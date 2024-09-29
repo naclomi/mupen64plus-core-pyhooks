@@ -417,6 +417,7 @@ extern "C" void pyRunButtonHooks(struct r4300_core* r4300) {
 }
 
 extern "C" void pyLoadHooks(const char *path) {
+
     printf("Scanning %s for hooks\n", path);
     struct dirent *entry;
     DIR *dp;
@@ -442,6 +443,9 @@ extern "C" void pyLoadHooks(const char *path) {
     
     auto py_sys = py::module::import("sys");
     py_sys.attr("path").attr("append")(py::str(path));
+
+    std::string py_version_info = py_sys.attr("version").attr("replace")("\n"," ").cast<std::string>();
+    std::cout << "Running Python version " << py_version_info << "\n";
 
     auto mupen_core = py::module::import("mupen_core");
 
