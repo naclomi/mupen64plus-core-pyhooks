@@ -151,8 +151,8 @@ CFLAGS += -fno-strict-aliasing -fvisibility=hidden -I$(SRCDIR) -I$(SRCDIR)/asm_d
 CXXFLAGS += -fvisibility-inlines-hidden
 LDLIBS +=  -lm
 
-CFLAGS += $(shell python3-config --embed --cflags) $(shell python3 -m pybind11 --includes)
-CXXFLAGS += $(shell python3-config --embed --cflags) $(shell python3 -m pybind11 --includes)
+CFLAGS += $(shell python3-config --embed --cflags) $(shell python3 -m pybind11 --includes) -Xlinker -export-dynamic
+CXXFLAGS += $(shell python3-config --embed --cflags) $(shell python3 -m pybind11 --includes) -Xlinker -export-dynamic
 LDLIBS += $(shell python3-config --embed --ldflags)
 
 # Since we are building a shared library, we must compile with -fPIC on some architectures
